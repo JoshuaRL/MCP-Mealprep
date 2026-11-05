@@ -1,0 +1,9 @@
+{
+  "protocolVersion": "2025-11-25",
+  "gatewayVersion": "4.2.1",
+  "servers": [
+    { "name": "everything", "runner": "npx", "package": "@modelcontextprotocol/server-everything@2.1.0", "tools": ["echo"] },
+    { "name": "memory", "runner": "npx", "package": "@modelcontextprotocol/server-memory@2.0.1", "tools": ["create_entities", "open_nodes", "delete_entities"] },
+    { "name": "fetch", "runner": "uvx", "package": "mcp-server-fetch==2026.10.28", "tools": ["fetch"] }
+  ]
+}

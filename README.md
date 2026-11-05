@@ -1,48 +1,71 @@
 # MCP-Mealprep
 Where you take a bunch of containers, put little MCP snacks in them, and keep 'em cool for later.
 
-This project takes a number of MCP servers from GitHub locations, runs them, and serves them with supergateway and optionally mcpo, and pulls them together with docker-compose to run as a stack for ML/AI resources.
+This project packages MCP server launch recipes with Supergateway and Docker Compose
+for self-hosted AI tooling, with an optional separately authenticated mcpo bridge.
 
-## New V2 Version
-Completely rebuilt thanks to [supergateway](https://github.com/supercorp-ai/supergateway) and [mcpo](https://github.com/open-webui/mcpo) projects! Can now be used for both internal and external MCP services safely and should update with python, mcpo, pip, npx, uv, and individual MCP server updates. 
+## Current source (unreleased repairs)
+Rebuilt around [supergateway](https://github.com/supercorp-ai/supergateway), with an optional [mcpo](https://github.com/open-webui/mcpo) OpenAPI bridge.
 
-The docker-compose can be considered example servers; add as many as you need from public repos following this syntax. Each custom GHCR container runs both the MCP server for local STDIO/STOUT and also exposes these servers safely on SSE protocol and optionally as an OpenAPI-compatible HTTP server for OpenWebUI. Either connect to local resources or route through a proxy like nginx, Traefik, Caddy, etc. Once exposed, you can connect to external services like OpenWebUI, n8n, Flowise, Claude, Cursor, etc.
+> **Local development, not a new release:** The launcher requires explicit packages/
+> runners and lets the installed Supergateway binary own its backend. The Dockerfile
+> now uses Node 24, Debian Bookworm and a newer Python runtime. Real-image validation
+> is limited to the small pinned test catalog described in [integration checks](docs/INTEGRATION.md).
+> Compose now builds reviewed local source, requires gateway key files, binds host
+> ports to loopback, runs non-root and persists Memory in a named volume. The old
+> published `:main` image is unchanged. See [deployment boundaries](docs/DEPLOYMENT.md).
+> This is not production certification or a TLS deployment. SSE is not encryption.
 
-The GHCR container is based on debian, and should work with uv, npx, and pip installs. You should also be able to install docker mcp servers the old method, if needed. See "Depreciated Docker Process" below for more information.
+The Compose services are examples, not a validated production catalog. Each gateway
+launches its configured stdio MCP backend and exposes Streamable HTTP by default
+(explicit legacy SSE is available). The launcher does not
+start a separate unconnected backend first. Remote access requires independently
+configured HTTPS and network controls in addition to the required API key; a reverse proxy alone does
+not guarantee safe tool access.
+
+The current Dockerfile uses digest-pinned Node/Debian and uv images. Python's pip
+runs in a virtual environment rather than overriding Debian's system packages.
+Supergateway is installed at build time with an exact version, not downloaded by
+the launcher on each start. Server packages still use npx/uvx at runtime; see the
+integration guide for the exact tested versions and reproducibility limitations.
 
 ### mcpo Installation
-If you want to install the optional mcpo addition, add "USE_MCPO=true" to environment variables. This will instruct the startup.sh script to gather the MCP server command and environment variables and pass them to the mcpo command when ran. Please be aware this will be a duplicate server running at the same time and not connected with the original one. But it will allow for an OpenAPI-compatible endpoint that integrates with OpenWebUI and you can find more info about each server at /docs. This is not necessary, but if you want it, you can enable per server.
+The retired in-process `USE_MCPO=true` flag still fails explicitly. Use the optional
+`docker-compose.mcpo.yml` overlay instead: it builds a separate pinned bridge,
+requires a distinct key, and proxies an existing authenticated `/mcp` gateway.
+See [client/bridge setup](docs/CLIENTS.md). Never use `MCP_ARGS` as an API key.
 
 ### startup.sh README
-If you'd like more information about what exactly this bash script does once invoked in your container, please see "Startup README.md" for a comprehensive discussion of what is happening line by line. Vet it to make sure you're comfortable with running it, since it'll run in each MCP server container.
+See [Startup README.md](<Startup README.md>) for the configuration contract, runner
+mapping, trust boundaries and test limitations.
 
-### Security scanning
-## Scanning security with mcp-shield
-The "startup.sh" script now runs 
-```
-"npx mcp-shield >> "mcp-shield.log" 2>&1
-```
-to run that mcp security scanner, [mcp-shield](https://github.com/riseandignite/mcp-shield) and appends to the logfile. See their documentation for more info. You can also run that command in the container at any time to see if there's an issue, for instance after an update.
+## Security checks
+The launcher no longer schedules a scanner after a long-running foreground gateway.
+That code was not a startup security check. Run a separately reviewed scanner such
+as [mcp-shield](https://github.com/riseandignite/mcp-shield) with explicit targets
+and configuration when needed. No automatic security scan or safety guarantee is
+provided by these correctness fixes.
 
 ## Client Connection
-Once your server stack is running, you can connect your MCP client to your IP or domain and port. Or you can use mcpo commands again to connect if there's not an easy way to 
-
-### N8N
-TBD
-
-### Flowise
-TBD
-
-### Claude, Cursor, etc
-TBD
+Use `/mcp` for default Streamable HTTP, or `/sse` after explicitly selecting legacy
+SSE. [Client connections](docs/CLIENTS.md) covers Open WebUI, n8n, Claude Code,
+Cursor, OpenCode V2, exact protocol examples and distinct gateway/mcpo keys.
+Wire-level checks are real; these client apps have not been run end-to-end here.
+Flowise-specific setup remains outside the selected client scope.
 
 ## Overview
 
-This project is a curated collection of Model Context Protocol (MCP) servers, designed to provide a comprehensive suite of AI-powered tools and services that can be easily deployed using Docker and/or Portainer. Built upon the [official MCP Servers repository](https://github.com/modelcontextprotocol/servers), [supergateway](https://github.com/supercorp-ai/supergateway), and [OpenWebUI's mcpo repository](https://github.com/open-webui/mcpo), this project allows developers and AI enthusiasts to quickly spin up a wide range of MCP-compatible services.
+This is a small Docker Compose recipe collection built on maintained transport
+tools, not a new MCP platform or a certified catalog. Real protocol tests cover
+three pinned server versions and the optional bridge; the other recipes remain
+unvalidated. Portainer instructions describe prerequisites and limitations, not
+an end-to-end tested deployment.
 
 ## What is the Model Context Protocol?
 
-The Model Context Protocol (MCP) is an innovative framework that enables Large Language Models (LLMs) to securely access and interact with various tools, data sources, and services. It provides a standardized way for AI agents to:
+The Model Context Protocol (MCP) standardizes how AI clients discover and call tools,
+resources and services. Permissions, authentication and transport security still
+depend on the implementation and deployment. Clients can:
 
 - Retrieve information from different sources
 - Perform actions across various platforms
@@ -50,53 +73,86 @@ The Model Context Protocol (MCP) is an innovative framework that enables Large L
 
 ## Included MCP Servers
 
-This docker-compose collection includes servers for:
+The Compose examples select packages for:
 
 - Web Search (SearXNG and Brave)
 - Everything (MCP testing)
-- GitHub Interactions
 - Calculator
 - Slack
 - Everart
 - Google Maps
 - Web Crawl (Fetch and Puppeteer)
 - Sequential Thinking
-- Postgres/Vector Retrieval (Supabase, Qwant, Pinecone, and Memory)
-- And more...
+- Supabase and Memory
+- AWS KB Retrieval and Docker
+
+Every service must set `MCP_COMMAND_TYPE` and `MCP_PACKAGE`; `MCP_SERVER_TYPE` is
+only a log label. There is no silent fallback to the Everything test server.
+Puppeteer, Slack, EverArt, Google Maps and the old official Brave package are
+deprecated on npm. Their explicit identities are retained here to correct routing,
+not to certify them for use. Replacing/validating the catalog is a separate step.
+
+### Supabase configuration change
+
+The old `uv mcp-server-supabase` command was invalid, and PyPI returned 404 for
+that package during the repair. The example now selects the published npm CLI
+`@supabase/mcp-server-supabase` using `npx`.
+
+Mount a Supabase personal access token via `SUPABASE_ACCESS_TOKEN_FILE` (the Compose
+secret `supabase_access_token`) and set `SUPABASE_PROJECT_REF` to the intended
+project. The recipe passes `--read-only --project-ref ...`; the token
+is inherited as `SUPABASE_ACCESS_TOKEN`, not placed in command arguments. The old
+`MCP_QUERY_API_KEY` / `MCP_SUPABASE_*` database settings are not compatible with this
+CLI. Use a test project first. No real Supabase API call has been validated here.
 
 ## Prerequisites
 
-- Docker
-- Portainer (not necessary, but useful)
-- API Tokens/Keys for specific services (optional, depends on the server)
+- Docker with a current Compose plugin supporting `pull_policy: build`.
+- A private gateway key file readable by container UID 1000; a distinct key for mcpo.
+- Provider credentials only for the selected integrations that require them.
+- Portainer is optional; review its build/secret support limitations first.
 
-## Installation in Portainer
+## Installation with Compose / Portainer
 
-### Step 1: Prepare Portainer
-1. Open your Portainer environment, usually "local"
-2. Navigate to "Stacks"
-3. Click "Add stack"
-
-### Step 2: Deploy the Stack
-1. Name your stack (e.g., "mcp-server-stack")
-2. Under "Build method", select "Upload a file" or "Web editor"
-3. Upload the `docker-compose.yml` from this repository or copy and paste
-4. Configure any required environment variables
-   - Slack Bot Token
-   - GitLab Personal Access Token
-   - Google Maps API Key
-   - Brave Search API Key
-   - etc.
-5. Click "Deploy the stack"
-
-### Step 3: Configure Individual Servers
-- Some servers require specific configuration or API tokens
-- Refer to the individual server documentation in the [MCP Servers repository](https://github.com/modelcontextprotocol/servers)
+Follow [deployment setup and boundaries](docs/DEPLOYMENT.md) for secret-file
+permissions, explicit source builds, selecting services, authenticated client
+headers, Memory storage and Portainer limitations. Pasting YAML alone is not enough
+to supply a build context or host-side secret files. No real Portainer deployment
+or external provider credentials have been tested by this local repair.
 
 ## Running
 
 ### Warnings
-This is a first step to running these MCP services in a containerized and easier-to-deploy process. But you'll need to do some testing and validation for soem of the environment variables and connecting to other services, especially for adding other servers. I've tested most of these personally at least running on a VPS stack, so they should be beta level functional. And V2 runs better than V1. And this runs each server with an SSE connection, and that should be secure. But your underlying system, proxy, or encryption settings might have some security flaws. This project does not vet MCP server functionality or safety, merely packages for easy server deployment and secure traffic. If you require MCP server vetting, look into [MCP Evaluator](https://github.com/JeredBlu/custom-instructions/blob/main/mcpevaluatorv3.md)
+These are deployment examples, not proof that each integration currently works.
+Offline tests exercise launch arguments, process handoff and recipe selection.
+The separate real-image smoke checks selected MCP calls and container shutdown;
+it does not validate provider credentials, production health or security. The old
+published image still uses unsupported runtime versions until a replacement is
+separately released. Review permissions, storage, network exposure and dependencies
+before any deployment.
+
+### Local regression checks
+
+Python 3.8+, Bash and Docker Compose are required for the complete offline suite.
+Docker Compose is used only to validate configuration; no daemon/container is needed.
+Without Docker, the Compose checks are skipped and launcher checks still run.
+
+```sh
+bash -n startup.sh
+docker compose --env-file /dev/null -f docker-compose.yml config --quiet
+python3 -m unittest discover -s tests -v
+```
+
+Offline tests substitute local executables and never download server packages.
+For the complete **local** release gate, build both targets and run
+`tests/release_check.py` as described in [verification and release boundaries](docs/VERIFICATION.md).
+It verifies real images and refuses incomplete/failed cleanup evidence. The future
+workflow gates registry login/publication on these checks and promotes the tested
+gateway without rebuilding. No hosted CI, push or signing result is implied here.
+
+For the separate networked, credential-free Docker test, see
+[real-image integration checks](docs/INTEGRATION.md). It is explicit, not part of the
+offline unittest suite, and never publishes an image or runs the full Compose stack.
 
 ## Customization
 
@@ -105,8 +161,9 @@ This is a first step to running these MCP services in a containerized and easier
 - Ensure you have the necessary Dockerfile and dependencies
 
 ### Environment Variables
-- Replace placeholder tokens on both environment variables and command variables with necessary settings, like your actual API keys
-- Customize port mappings if needed, default is sequential
+- Supply required credentials through mounted secret files, never committed values
+  or `MCP_ARGS`. These recipes are not a secrets-management system.
+- Ports are sequential and loopback-only; remote access requires separately reviewed HTTPS.
 
 ## Security Considerations
 - Keep API tokens and sensitive information confidential
@@ -122,26 +179,13 @@ Any new MCP servers need a clean install command via npx, uv, or pip. If you hav
 3. Provide clear documentation, including GitHub repo for MCP server
 4. Submit a pull request or issue with proposed additions
 
-## Depreciated Docker Process
-V1 MCP Mealprep used Github Dockerfiles from the individual repos, and would run them in containers via docker-compose. This worked, but could be relatively insecure and didn't allow connection with all clients. If the MCP server you want to use isn't available via npx, uv, pip, etc. and you can validate the Dockerfile is running securely doing what you want, you can feel free to continue to use this method. The server needs to have a Dockerfile in their repo, and anything that uses a "uv.lock" file seems to block installation via this method. Look at docker-compose-old.yml or this example to see how it should work:
+## Retired V1 deployment
 
-```
-version: '3.8'
-services:
-  mcp-server-everything: 
-    build:
-      context: https://github.com/modelcontextprotocol/servers.git#main
-      dockerfile: src/everything/Dockerfile
-    image: mcp-server:latest
-    container_name: mcp-everything-server
-    ports:
-      - "0.0.0.0:8081:8081"
-    environment:
-      - NODE_ENV=production
-    restart: unless-stopped
-    networks:
-      - mcp-network
-```
+The root `docker-compose-old.yml` and runnable README fallback are retired, not
+supported alternatives. Historical content is preserved as deliberately non-runnable
+[archive text](docs/archive/README.md). It contains unsafe/obsolete settings and
+must not be deployed. The placeholder `mcp-shield.log` was not scan evidence and
+has been removed. Use the current local-source setup instead.
 
 ## License
 

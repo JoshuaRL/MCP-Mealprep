@@ -1,212 +1,192 @@
-## MCP Mealprep V2, that uses the GHCR container from this repo to build MCP servers with npx, uv, or pip
-# All-in-One MCP Server Docker Compose, from https://github.com/modelcontextprotocol/servers primarily, using supergateway for SSE
-# mcpo is available when added as an environment variable "USE_MCPO=true" but will run a duplicate server for OpenAPI endpoint for OpenWebUI interoperability
-# Delete any MCP components you don't want, make adjustments, or add ones with the example "Everything" server below.
-# Old dockerfile process can be used, see the "docker-compose-old.yml" for examples.
+# Reviewed local source only: never fall back to the old published :main image.
+# Select services explicitly. Most legacy provider recipes remain unvalidated.
+x-runtime: &runtime
+  image: mealprep:local-hardened
+  build: .
+  pull_policy: build
+  user: "1000:1000"
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  networks: [mcp_network]
+  secrets: [gateway_api_key]
+  command: ["/app/startup.sh"]
 
-version: '3.8'
+x-auth: &auth
+  MCP_API_KEY_FILE: /run/secrets/gateway_api_key
+
 services:
-  # Server: everything (copy this test "Everything" server as an example)
   mcp-mealprep-everything:
-    image: ghcr.io/joshuarl/mcp-mealprep:main
-    container_name: mcp-mealprep-everything
-    ports:
-      - "8081:8081"
-    networks:
-      - mcp_network
+    <<: *runtime
+    ports: ["127.0.0.1:8081:8081"]
     environment:
-      - MCP_SERVER_TYPE=everything
-      - MCP_PORT=8081
-      - MCP_COMMAND_TYPE=npx
-      - MCP_PACKAGE=@modelcontextprotocol/server-everything
-    command: ["/app/startup.sh"]
+      <<: *auth
+      MCP_SERVER_TYPE: everything
+      MCP_PORT: 8081
+      MCP_COMMAND_TYPE: npx
+      MCP_PACKAGE: '@modelcontextprotocol/server-everything'
 
-  # Server: fetch
   mcp-mealprep-fetch:
-    image: ghcr.io/joshuarl/mcp-mealprep:main
-    container_name: mcp-mealprep-fetch
-    ports:
-      - "8082:8082"
-    networks:
-      - mcp_network
+    <<: *runtime
+    ports: ["127.0.0.1:8082:8082"]
     environment:
-      - MCP_SERVER_TYPE=fetch
-      - MCP_PORT=8082
-      - MCP_COMMAND_TYPE=uvx
-      - MCP_PACKAGE=mcp-server-fetch
-    command: ["/app/startup.sh"]
+      <<: *auth
+      MCP_SERVER_TYPE: fetch
+      MCP_PORT: 8082
+      MCP_COMMAND_TYPE: uvx
+      MCP_PACKAGE: mcp-server-fetch
 
-  # Server: supabase
   mcp-mealprep-supabase:
-    image: ghcr.io/joshuarl/mcp-mealprep:main
-    container_name: mcp-mealprep-supabase
-    ports:
-      - "8083:8083"
-    networks:
-      - mcp_network
+    <<: *runtime
+    ports: ["127.0.0.1:8083:8083"]
+    secrets: [gateway_api_key, supabase_access_token]
     environment:
-      - MCP_SERVER_TYPE=supabase
-      - MCP_PORT=8083
-      - MCP_COMMAND_TYPE=uv
-      - MCP_PACKAGE=mcp-server-supabase
-      - MCP_QUERY_API_KEY=your_query_api_key
-      - MCP_SUPABASE_PROJECT_REF=your_project_reference
-      - MCP_SUPABASE_DB_PASSWORD=your_database_password
-      - MCP_SUPABASE_REGION=us-east-1
-    command: ["/app/startup.sh"]
+      <<: *auth
+      MCP_SERVER_TYPE: supabase
+      MCP_PORT: 8083
+      MCP_COMMAND_TYPE: npx
+      MCP_PACKAGE: '@supabase/mcp-server-supabase'
+      SUPABASE_ACCESS_TOKEN_FILE: /run/secrets/supabase_access_token
+      MCP_ARGS: --read-only --project-ref ${SUPABASE_PROJECT_REF:-your_project_reference}
 
-  # Server: sequential-thinking
   mcp-mealprep-sequential-thinking:
-    image: ghcr.io/joshuarl/mcp-mealprep:main
-    container_name: mcp-mealprep-sequential-thinking
-    ports:
-      - "8084:8084"
-    networks:
-      - mcp_network
+    <<: *runtime
+    ports: ["127.0.0.1:8084:8084"]
     environment:
-      - MCP_SERVER_TYPE=sequential-thinking
-      - MCP_PORT=8084
-      - MCP_COMMAND_TYPE=npx
-      - MCP_PACKAGE=@modelcontextprotocol/server-sequential-thinking
-    command: ["/app/startup.sh"]
+      <<: *auth
+      MCP_SERVER_TYPE: sequential-thinking
+      MCP_PORT: 8084
+      MCP_COMMAND_TYPE: npx
+      MCP_PACKAGE: '@modelcontextprotocol/server-sequential-thinking'
 
-  # Server: calculator
   mcp-mealprep-calculator:
-    image: ghcr.io/joshuarl/mcp-mealprep:main
-    container_name: mcp-mealprep-calculator
-    ports:
-      - "8085:8085"
-    networks:
-      - mcp_network
+    <<: *runtime
+    ports: ["127.0.0.1:8085:8085"]
     environment:
-      - MCP_SERVER_TYPE=calculator
-      - MCP_PORT=8085
-      - MCP_COMMAND_TYPE=uvx
-      - MCP_PACKAGE=mcp-server-calculator
-    command: ["/app/startup.sh"]
+      <<: *auth
+      MCP_SERVER_TYPE: calculator
+      MCP_PORT: 8085
+      MCP_COMMAND_TYPE: uvx
+      MCP_PACKAGE: mcp-server-calculator
 
-  # Server: memory
   mcp-mealprep-memory:
-    image: ghcr.io/joshuarl/mcp-mealprep:main
-    container_name: mcp-mealprep-memory
-    ports:
-      - "8086:8086"
-    networks:
-      - mcp_network
+    <<: *runtime
+    ports: ["127.0.0.1:8086:8086"]
+    volumes: ["memory_data:/data/memory"]
     environment:
-      - MCP_SERVER_TYPE=memory
-      - MCP_PORT=8086
-    command: ["/app/startup.sh"]
+      <<: *auth
+      MCP_SERVER_TYPE: memory
+      MCP_PORT: 8086
+      MCP_COMMAND_TYPE: npx
+      MCP_PACKAGE: '@modelcontextprotocol/server-memory'
+      MEMORY_FILE_PATH: /data/memory/memory.jsonl
 
-  # Server: puppeteer
   mcp-mealprep-puppeteer:
-    image: ghcr.io/joshuarl/mcp-mealprep:main
-    container_name: mcp-mealprep-puppeteer
-    ports:
-      - "8087:8087"
-    networks:
-      - mcp_network
+    <<: *runtime
+    ports: ["127.0.0.1:8087:8087"]
     environment:
-      - MCP_SERVER_TYPE=puppeteer
-      - MCP_PORT=8087
-    command: ["/app/startup.sh"]
+      <<: *auth
+      MCP_SERVER_TYPE: puppeteer
+      MCP_PORT: 8087
+      MCP_COMMAND_TYPE: npx
+      MCP_PACKAGE: '@modelcontextprotocol/server-puppeteer'
 
-  # Server: searxng
   mcp-mealprep-searxng:
-    image: ghcr.io/joshuarl/mcp-mealprep:main
-    container_name: mcp-mealprep-searxng
-    ports:
-      - "8088:8088"
-    networks:
-      - mcp_network
+    <<: *runtime
+    ports: ["127.0.0.1:8088:8088"]
     environment:
-      - MCP_SERVER_TYPE=searxng
-      - MCP_PORT=8088
-      - SEARXNG_URL=http://localhost:8080
-    command: ["/app/startup.sh"]
+      <<: *auth
+      MCP_SERVER_TYPE: searxng
+      MCP_PORT: 8088
+      MCP_COMMAND_TYPE: npx
+      MCP_PACKAGE: mcp-searxng
+      SEARXNG_URL: http://localhost:8080
 
-  # Server: slack
   mcp-mealprep-slack:
-    image: ghcr.io/joshuarl/mcp-mealprep:main
-    container_name: mcp-mealprep-slack
-    ports:
-      - "8089:8089"
-    networks:
-      - mcp_network
+    <<: *runtime
+    ports: ["127.0.0.1:8089:8089"]
+    secrets: [gateway_api_key, slack_bot_token]
     environment:
-      - MCP_SERVER_TYPE=slack
-      - MCP_PORT=8089
-      - SLACK_BOT_TOKEN={SlackTokenHere}
-      - SLACK_TEAM_ID={SlackTeamIDHere}
-    command: ["/app/startup.sh"]
+      <<: *auth
+      MCP_SERVER_TYPE: slack
+      MCP_PORT: 8089
+      MCP_COMMAND_TYPE: npx
+      MCP_PACKAGE: '@modelcontextprotocol/server-slack'
+      SLACK_BOT_TOKEN_FILE: /run/secrets/slack_bot_token
+      SLACK_TEAM_ID: ${SLACK_TEAM_ID:-your_team_id}
 
-  # Server: everart
   mcp-mealprep-everart:
-    image: ghcr.io/joshuarl/mcp-mealprep:main
-    container_name: mcp-mealprep-everart
-    ports:
-      - "8090:8090"
-    networks:
-      - mcp_network
+    <<: *runtime
+    ports: ["127.0.0.1:8090:8090"]
+    secrets: [gateway_api_key, everart_api_key]
     environment:
-      - MCP_SERVER_TYPE=everart
-      - MCP_PORT=8090
-      - EVERART_API_KEY={EverartAPIKeyHere}
-    command: ["/app/startup.sh"]
+      <<: *auth
+      MCP_SERVER_TYPE: everart
+      MCP_PORT: 8090
+      MCP_COMMAND_TYPE: npx
+      MCP_PACKAGE: '@modelcontextprotocol/server-everart'
+      EVERART_API_KEY_FILE: /run/secrets/everart_api_key
 
-  # Server: gmaps
   mcp-mealprep-gmaps:
-    image: ghcr.io/joshuarl/mcp-mealprep:main
-    container_name: mcp-mealprep-gmaps
-    ports:
-      - "8091:8091"
-    networks:
-      - mcp_network
+    <<: *runtime
+    ports: ["127.0.0.1:8091:8091"]
+    secrets: [gateway_api_key, google_maps_api_key]
     environment:
-      - MCP_SERVER_TYPE=gmaps
-      - MCP_PORT=8091
-      - GOOGLE_MAPS_API_KEY={GoogleMapsAPIKeyHere}
-    command: ["/app/startup.sh"]
+      <<: *auth
+      MCP_SERVER_TYPE: gmaps
+      MCP_PORT: 8091
+      MCP_COMMAND_TYPE: npx
+      MCP_PACKAGE: '@modelcontextprotocol/server-google-maps'
+      GOOGLE_MAPS_API_KEY_FILE: /run/secrets/google_maps_api_key
 
-  # Server: brave-search
   mcp-mealprep-brave-search:
-    image: ghcr.io/joshuarl/mcp-mealprep:main
-    container_name: mcp-mealprep-brave-search
-    ports:
-      - "8092:8092"
-    networks:
-      - mcp_network
+    <<: *runtime
+    ports: ["127.0.0.1:8092:8092"]
+    secrets: [gateway_api_key, brave_api_key]
     environment:
-      - MCP_SERVER_TYPE=brave-search
-      - MCP_PORT=8092
-      - BRAVE_API_KEY={BraveAPIKeyHere}
-    command: ["/app/startup.sh"]
+      <<: *auth
+      MCP_SERVER_TYPE: brave-search
+      MCP_PORT: 8092
+      MCP_COMMAND_TYPE: npx
+      MCP_PACKAGE: '@modelcontextprotocol/server-brave-search'
+      BRAVE_API_KEY_FILE: /run/secrets/brave_api_key
 
-  # Server: aws-kb-retrieval
   mcp-mealprep-aws-kb-retrieval:
-    image: ghcr.io/joshuarl/mcp-mealprep:main
-    container_name: mcp-mealprep-aws-kb-retrieval
-    ports:
-      - "8093:8093"
-    networks:
-      - mcp_network
+    <<: *runtime
+    ports: ["127.0.0.1:8093:8093"]
     environment:
-      - MCP_SERVER_TYPE=aws-kb-retrieval
-      - MCP_PORT=8093
-    command: ["/app/startup.sh"]
+      <<: *auth
+      MCP_SERVER_TYPE: aws-kb-retrieval
+      MCP_PORT: 8093
+      MCP_COMMAND_TYPE: uvx
+      MCP_PACKAGE: mcp-server-aws-kb-retrieval
 
-  # Server: docker
+  # No Docker socket mount is supplied: granting daemon access is consequential.
   mcp-mealprep-docker:
-    image: ghcr.io/joshuarl/mcp-mealprep:main
-    container_name: mcp-mealprep-docker
-    ports:
-      - "8094:8094"
-    networks:
-      - mcp_network
+    <<: *runtime
+    ports: ["127.0.0.1:8094:8094"]
     environment:
-      - MCP_SERVER_TYPE=docker
-      - MCP_PORT=8094
-    command: ["/app/startup.sh"]
+      <<: *auth
+      MCP_SERVER_TYPE: docker
+      MCP_PORT: 8094
+      MCP_COMMAND_TYPE: uvx
+      MCP_PACKAGE: mcp-server-docker
+
+secrets:
+  gateway_api_key:
+    file: ${MEALPREP_SECRET_DIR:-./secrets}/gateway_api_key
+  supabase_access_token:
+    file: ${MEALPREP_SECRET_DIR:-./secrets}/supabase_access_token
+  slack_bot_token:
+    file: ${MEALPREP_SECRET_DIR:-./secrets}/slack_bot_token
+  everart_api_key:
+    file: ${MEALPREP_SECRET_DIR:-./secrets}/everart_api_key
+  google_maps_api_key:
+    file: ${MEALPREP_SECRET_DIR:-./secrets}/google_maps_api_key
+  brave_api_key:
+    file: ${MEALPREP_SECRET_DIR:-./secrets}/brave_api_key
+
+volumes:
+  memory_data:
 
 networks:
   mcp_network:

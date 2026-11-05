@@ -1,3 +1,11 @@
+RETIRED HISTORICAL TEXT — NOT A COMPOSE FILE.
+Do not execute this archive or remove this preamble to deploy it.
+It contains unsafe privileges, broad host bindings, a writable home-directory
+mount, mutable remote builds and obsolete/broken integrations. No current
+gateway authentication, transport or persistence contract applies here.
+Use ../DEPLOYMENT.md and ../CLIENTS.md for the current local-source workflow.
+The historical body below is preserved for review only, not endorsed as a fallback.
+
 ## DEPRECIATED - This will still function, and is a backup option, but see the new process that uses this repo's GHCR container to build npx, uv, and pip
 # All-in-One MCP Server Docker Compose, from https://github.com/modelcontextprotocol/servers primarily
 # Delete any MCP components you don't want, make adjustments, or add ones with the example below.
