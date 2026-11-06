@@ -178,7 +178,9 @@ class OptionalSmoke(Smoke):
             require(MARKER in text(tool(native, "echo", {"message": MARKER})), "Native MCP failed while bridge was connected")
             versions = json.loads(docker("exec", container, "/opt/mcpo/bin/python", "-c",
                                         "import json,importlib.metadata as m;print(json.dumps({n:m.version(n) for n in ['mcpo','mcp','fastapi','starlette']}))"))
-            require(versions == {"mcpo": "0.0.20", "mcp": "1.26.0", "fastapi": "0.135.0", "starlette": "1.10.0"}, "Bridge dependency versions differ")
+            expected_versions = self.catalog.get("bridgeVersions")
+            require(isinstance(expected_versions, dict) and expected_versions, "Bridge version catalog entry missing")
+            require(versions == expected_versions, "Bridge dependency versions differ from catalog: " + json.dumps(versions))
             result.update(status="passed", versions=versions,
                           verified=["authenticated OpenAPI schema and echo", "schema/docs/tools reject absent, wrong and gateway keys",
                                     "native MCP call with bridge concurrently connected", "UID 1000 and keys absent from argv/configured env",

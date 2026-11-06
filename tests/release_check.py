@@ -43,10 +43,12 @@ def inspect_image(image):
     result = subprocess.run(["docker", "image", "inspect", "--format", "{{json .}}", image],
                             text=True, capture_output=True, check=True)
     info = json.loads(result.stdout)
-    if info["Config"].get("User") != "1000:1000":
-        raise ValueError("Reviewed images must run as UID/GID 1000:1000.")
-    return {"id": info["Id"], "os": info["Os"], "architecture": info["Architecture"],
-            "user": info["Config"]["User"]}
+    config = info.get("Config") if isinstance(info, dict) else None
+    user = config.get("User") if isinstance(config, dict) else None
+    if not isinstance(info.get("Id"), str) or not isinstance(info.get("Os"), str) \
+            or not isinstance(info.get("Architecture"), str) or user != "1000:1000":
+        raise ValueError("Reviewed image metadata is incomplete or not non-root 1000:1000.")
+    return {"id": info["Id"], "os": info["Os"], "architecture": info["Architecture"], "user": user}
 
 
 def main():
@@ -80,11 +82,13 @@ def main():
                             ("compose-sse", ["-f", "examples/compose.sse.yml"])]:
             run(name, ["docker", "compose", "--env-file", "/dev/null", "-f", "docker-compose.yml", *extra, "config", "--quiet"])
         # Non-executing parse only: the archived V1 text must not be deployable.
+        # Any nonzero exit is not enough (daemon down, missing binary, ...);
+        # require the Compose YAML load-error signature for this retired file.
         retired = subprocess.run(["docker", "compose", "--env-file", "/dev/null", "-f",
                                   "docs/archive/docker-compose-v1.yml.txt", "config", "--quiet"],
                                  cwd=ROOT, text=True, capture_output=True)
-        if retired.returncode == 0:
-            raise ValueError("Retired archive unexpectedly parsed as deployable Compose.")
+        if retired.returncode == 0 or "yaml: construct errors" not in retired.stderr.lower():
+            raise ValueError("Retired archive was not refused with the expected Compose YAML error.")
         report["checks"].append({"name": "archive-refused", "exitCode": retired.returncode, "expectedFailure": True})
         run("offline", [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"])
         run("legacy", [sys.executable, "tests/integration_smoke.py", "--image", options.image, "--output", str(output / "legacy")])
@@ -104,7 +108,7 @@ def main():
         if source_hashes() != report["sourceSHA256"]:
             raise ValueError("Source changed during verification; rerun on the intended artifact.")
         report["status"] = "passed"
-    except (OSError, ValueError, subprocess.SubprocessError) as error:
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, subprocess.SubprocessError) as error:
         report.update(status="failed", error=str(error))
     finally:
         (output / "summary.json").write_text(json.dumps(report, indent=2) + "\n")

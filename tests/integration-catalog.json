@@ -1,6 +1,7 @@
 {
   "protocolVersion": "2025-11-25",
   "gatewayVersion": "4.2.1",
+  "bridgeVersions": {"mcpo": "0.0.20", "mcp": "1.26.0", "fastapi": "0.135.0", "starlette": "1.10.0"},
   "servers": [
     { "name": "everything", "runner": "npx", "package": "@modelcontextprotocol/server-everything@2.1.0", "tools": ["echo"] },
     { "name": "memory", "runner": "npx", "package": "@modelcontextprotocol/server-memory@2.0.1", "tools": ["create_entities", "open_nodes", "delete_entities"] },
