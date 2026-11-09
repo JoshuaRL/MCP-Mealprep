@@ -1,98 +1,93 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 echo "MCP Server Startup Script"
 echo "========================="
 
-# Read environment variables or set defaults
-MCP_SERVER_TYPE=${MCP_SERVER_TYPE:-"everything"}
+# The type is a log label, not a package selector. Never guess an integration.
+MCP_SERVER_TYPE=${MCP_SERVER_TYPE:-"custom"}
 MCP_PORT=${MCP_PORT:-8081}
-MCP_COMMAND_TYPE=${MCP_COMMAND_TYPE:-"npx"}  # npx, uvx, uv, python
-MCP_PACKAGE=${MCP_PACKAGE:-"@modelcontextprotocol/server-everything"}
+MCP_COMMAND_TYPE=${MCP_COMMAND_TYPE:-""}
+MCP_PACKAGE=${MCP_PACKAGE:-""}
 MCP_ARGS=${MCP_ARGS:-""}
-USE_SUPERARGS=${USE_SUPERARGS:-false}
+MCP_TRANSPORT=${MCP_TRANSPORT:-streamable-http}
+fail() { echo "Startup error: $1" >&2; exit 1; }
 
-# Function to check if a port is available
-check_port_available() {
-  local port=$1
-  if nc -z localhost "$port" 2>/dev/null; then
-    return 0 # Port is in use
-  else
-    return 1 # Port is free
-  fi
-}
+[[ -n "$MCP_COMMAND_TYPE" ]] || fail "MCP_COMMAND_TYPE is required (npx, uvx, uv or python3)."
+[[ -n "${MCP_PACKAGE//[[:space:]]/}" ]] || fail "MCP_PACKAGE is required; there is no fallback server."
+if [[ ! "$MCP_PORT" =~ ^[0-9]{1,5}$ ]] || (( 10#$MCP_PORT < 1 || 10#$MCP_PORT > 65535 )); then
+  fail "MCP_PORT must be a decimal integer from 1 to 65535."
+fi
+MCP_PORT=$((10#$MCP_PORT))
 
-# Function to check dependency readiness using curl
-check_dependency_ready() {
-  local port=$1
-  local timeout=30
-  local retries=5
-  local delay=2
+# The old concurrent mcpo path never worked. Do not silently pretend it starts.
+case "${USE_MCPO:-false}" in
+  false) ;;
+  true) fail "USE_MCPO=true is retired; use docker-compose.mcpo.yml as a separate service." ;;
+  *) fail "USE_MCPO must be true or false." ;;
+esac
+if [[ "${USE_SUPERARGS:-false}" == "true" ]]; then
+  echo "USE_SUPERARGS is deprecated and ignored; the gateway always owns the backend." >&2
+fi
 
-  echo "Checking if service on port $port is ready..."
-
-  for i in $(seq 1 $retries); do
-    if curl -s --fail http://localhost:"$port" > /dev/null; then
-      echo "Service on port $port is ready."
-      return 0 # Success
-    else
-      echo "Attempt $i failed. Waiting $delay seconds..."
-      sleep "$delay"
-    fi
-  done
-
-  echo "Failed to connect to service on port $port after $retries attempts."
-  return 1 # Failure
-}
-
-
-# Build the MCP server command based on type
-SERVER_CMD=""
+# Package/module is one literal argument, never a shell command to eval here.
 case "$MCP_COMMAND_TYPE" in
-  "npx")
-    SERVER_CMD="npx -y ${MCP_PACKAGE}"
-    ;;
-  "uvx")
-    SERVER_CMD="uvx ${MCP_PACKAGE}"
-    ;;
-  "uv")
-    SERVER_CMD="uv ${MCP_PACKAGE}"
-    ;;
-  "python3")
-    SERVER_CMD="${MCP_PACKAGE}"
-    ;;
-  *)
-    echo "Unknown command type: ${MCP_COMMAND_TYPE}"
-    exit 1
-    ;;
+  npx) server=(npx -y "$MCP_PACKAGE") ;;
+  uvx) server=(uvx "$MCP_PACKAGE") ;;
+  uv) server=(uv tool run "$MCP_PACKAGE") ;;
+  python3) server=(python3 -m "$MCP_PACKAGE") ;;
+  *) fail "Unknown MCP_COMMAND_TYPE; choose npx, uvx, uv or python3." ;;
 esac
 
-# Launching MCP Server (Conditional based on USE_SUPERARGS):
-echo "Launching MCP Server (Type: $MCP_SERVER_TYPE, Port: $MCP_PORT)"
-if [ "$USE_SUPERARGS" = "true" ]; then
-  echo "Superargs logic removed for simplicity."
-else
-  eval "${SERVER_CMD} ${MCP_ARGS}"
-fi
+# One printable ASCII key (at least 16 characters); no inline gateway keys.
+# Values never enter the gateway argv or launcher logs. Files remain readable by
+# trusted backends in this container; this is not a backend isolation boundary.
+[[ ! -v SUPERGATEWAY_API_KEY && ! -v SUPERGATEWAY_API_KEY_FILE ]] || fail "Use only MCP_API_KEY_FILE for gateway authentication."
+MCP_API_KEY_FILE=${MCP_API_KEY_FILE:-}
+[[ -n "$MCP_API_KEY_FILE" && -f "$MCP_API_KEY_FILE" && -r "$MCP_API_KEY_FILE" ]] || fail "MCP_API_KEY_FILE must name a readable regular file."
+gateway_key=$(cat -- "$MCP_API_KEY_FILE") || fail "Cannot read gateway key file."
+LC_ALL=C
+export LC_ALL
+[[ "$gateway_key" =~ ^[!-~]{16,}$ ]] || fail "Gateway key file must contain one printable ASCII key of at least 16 characters."
+unset gateway_key
 
-# Launch Supergateway
-echo "Launching Supergateway (Port: $MCP_PORT)"
-npx -y supergateway \
-    --stdio "$SERVER_CMD ${MCP_ARGS}" \
-    --port "$MCP_PORT" --baseUrl http://localhost:"$MCP_PORT" \
-    --ssePath /sse --messagePath /message
+# Deliberately bounded credential mapping, not arbitrary *_FILE evaluation.
+for name in SUPABASE_ACCESS_TOKEN SLACK_BOT_TOKEN EVERART_API_KEY GOOGLE_MAPS_API_KEY BRAVE_API_KEY AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN; do
+    file_var="${name}_FILE"
+    if [[ -v "$file_var" ]]; then
+        [[ ! -v "$name" ]] || fail "Set either $name or $file_var, not both."
+        path=${!file_var}
+        [[ -n "$path" && -f "$path" && -r "$path" ]] || fail "$file_var must name a readable regular file."
+        value=$(cat -- "$path") || fail "Cannot read $file_var."
+        [[ -n "${value//[[:space:]]/}" && "$value" != *$'\n'* && "$value" != *$'\r'* ]] || fail "$file_var must contain one nonempty line."
+        export "$name=$value"
+        unset "$file_var"
+    fi
+done
+unset value path name file_var
 
-# Launch MCPO
-echo "Launching mcpo"
-if [ "$USE_MCPO" = "true" ]; then
-  echo "Using mcpo to duplicate MCP server and provide OpenAPI endpoint on same port."
-  uvx mcpo --port $MCP_PORT --api-key "${MCP_ARGS}" -- $SERVER_CMD
-else
-  echo "Skipping mcpo install for ${MCP_SERVER_TYPE container"
-fi
+case "$MCP_TRANSPORT" in
+    streamable-http) transport=(--outputTransport streamableHttp --streamableHttpPath /mcp --stateful) ;;
+    sse) transport=(--outputTransport sse --baseUrl "http://localhost:$MCP_PORT" --ssePath /sse --messagePath /message) ;;
+    *) fail "MCP_TRANSPORT must be streamable-http or sse." ;;
+esac
 
-# Run mcp-shield utility and redirect the output to the log file
-npx mcp-shield >> "mcp-shield.log" 2>&1
-echo "mcp-shield utility ran, see log for more info"
+# Supergateway takes a shell command string. Quote each fixed argument with POSIX
+# single quotes; preserve MCP_ARGS as an explicitly trusted legacy shell fragment.
+shell_quote() {
+  local quoted=${1//\'/\'\\\'\'}
+  printf "'%s'" "$quoted"
+}
+SERVER_CMD=""
+for argument in "${server[@]}"; do
+  SERVER_CMD+="$(shell_quote "$argument") "
+done
+SERVER_CMD+="$MCP_ARGS"
 
-echo "Startup complete."
+# No independent stdio prelaunch or post-exit startup tasks. The foreground gateway
+# owns its backend and exit status. Image smoke coverage is limited to the tested catalog.
+echo "Launching Supergateway (Type: $MCP_SERVER_TYPE, Port: $MCP_PORT)"
+exec supergateway \
+    --apiKeyFile "$MCP_API_KEY_FILE" --logLevel none \
+    --stdio "$SERVER_CMD" \
+    --port "$MCP_PORT" "${transport[@]}"

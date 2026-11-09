@@ -1,0 +1,42 @@
+# Optional overlay; always combine with docker-compose.yml. Proxies an existing
+# gateway, not a second stdio backend. Select only this bridge and its dependency.
+services:
+  # Bounded listener readiness before mcpo connects. This checks authenticated
+  # HTTP routing, not tool health; mcpo must still initialize/list tools itself.
+  mcp-mealprep-everything:
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "const fs=require('fs');fetch('http://127.0.0.1:8081/mcp',{headers:{Authorization:'Bearer '+fs.readFileSync(process.env.MCP_API_KEY_FILE,'utf8').trim()}}).then(r=>process.exit(r.status===400?0:1)).catch(()=>process.exit(1))"
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
+
+  mcp-mealprep-mcpo:
+    image: mealprep:local-mcpo
+    build:
+      context: .
+      target: mcpo
+    pull_policy: build
+    user: "1000:1000"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    ports: ["127.0.0.1:8000:8000"]
+    networks: [mcp_network]
+    depends_on:
+      mcp-mealprep-everything:
+        condition: service_healthy
+    secrets: [gateway_api_key, mcpo_api_key]
+    environment:
+      MCP_API_KEY_FILE: /run/secrets/gateway_api_key
+      MCPO_API_KEY_FILE: /run/secrets/mcpo_api_key
+      MCPO_UPSTREAM_URL: http://mcp-mealprep-everything:8081/mcp
+      MCPO_PORT: 8000
+      MCPO_ALLOWED_ORIGIN: ${MCPO_ALLOWED_ORIGIN:-http://localhost:3000}
+
+secrets:
+  mcpo_api_key:
+    file: ${MEALPREP_SECRET_DIR:-./secrets}/mcpo_api_key

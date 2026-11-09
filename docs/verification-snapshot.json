@@ -1,0 +1,70 @@
+{
+  "status": "passed-local-synthetic-scope",
+  "date": "2026-11-03",
+  "baseRevision": "d8d1a7bd9e23ab3fedaf29fe7a14244f00c882b0",
+  "workingTree": "local uncommitted repairs; not a released revision",
+  "review": "controller self-review only, not independent certification",
+  "platform": "linux/amd64",
+  "images": {
+    "gateway": {
+      "localTag": "mealprep-step5:gateway-20261103",
+      "id": "sha256:6433018057b363dd56fe8c104f4ba677c5727946c6c895ea9ecbf4adef17f930",
+      "user": "1000:1000"
+    },
+    "bridge": {
+      "localTag": "mealprep-step5:mcpo-20261103",
+      "id": "sha256:79c8fe66c16e6c84e0938da0de9c519aae2d04d43fbaa901bf9dcd95b4a21d66",
+      "user": "1000:1000"
+    }
+  },
+  "sourceSHA256": {
+    "Dockerfile": "4404b75450f7bf4241549a0862a06565d3a0938347d74c583cac34ba9e1076e6",
+    ".dockerignore": "2e282e400cd8ed32f2833b0b24538df1e274422852141a6527ad44b3fab79a8e",
+    "startup.sh": "977f21ad417bbbc88b4681216fbf87bcdae3ed08930bee540dd570fd90f190db",
+    "mcpo_bridge.py": "702a34ea7839c3659e49cc6913cf7737ea7ea971cadcf25bdedc5a091e2065e4",
+    "tests/release_check.py": "3268aec8d255fdfc4e71f6820ba91ff9de3e8784d6fb6cd3ce2643af8111a4a1",
+    ".github/workflows/docker-publish.yml": "482e39601c7a4076c0cb6f7d9fefc0fec82ff4e2839630707853a6bf22db8c93"
+  },
+  "sourceHashScope": "Selected build/launcher/bridge/gate/workflow files; full source hashes in the retained gate summary. This generated snapshot is not self-hashed by the gate.",
+  "runtimeVersions": {
+    "node": "24.22.2",
+    "python": "3.11.2",
+    "uv": "0.13.7",
+    "supergateway": "4.2.1"
+  },
+  "selectedServerVersions": {
+    "@modelcontextprotocol/server-everything": "2.1.0",
+    "@modelcontextprotocol/server-memory": "2.0.1",
+    "mcp-server-fetch": "2026.10.28"
+  },
+  "bridgeVersions": {
+    "mcpo": "0.0.20",
+    "mcp": "1.26.0",
+    "fastapi": "0.135.0",
+    "starlette": "1.10.0"
+  },
+  "protocol": "initialize handshake 2025-11-25 over explicit legacy SSE and stateful Streamable HTTP; separate OpenAPI bridge",
+  "checks": {
+    "offlineTests": 49,
+    "legacyLiveCases": 4,
+    "httpAndBridgeLiveCases": 4,
+    "invalidKeyStartupCases": 2,
+    "invalidUpstreamAuthCases": 1,
+    "memorySurvivedContainerRecreation": true,
+    "corsPreflights": true,
+    "removedContainers": 13,
+    "removedNetworks": 2,
+    "syntheticMemoryVolumeRemoved": true,
+    "retiredArchiveRefusedByCompose": true
+  },
+  "publication": { "hostedCiRun": false, "pushed": false, "signed": false, "deployed": false },
+  "limits": [
+    "Synthetic data and keys only; no real provider accounts or model requests",
+    "Client examples are documentation-derived; apps and Portainer/Swarm not run",
+    "No public TLS/OAuth deployment, modern 2026-07-28 protocol or other architecture validation",
+    "No SBOM, vulnerability scan, signature verification or full dependency lock",
+    "Production recipes remain unpinned; most integrations are unvalidated or deprecated",
+    "No concurrent Memory-writer, backup/restore, outage/restart or host-crash guarantee",
+    "Local image IDs are not published registry digests; old GHCR main remains unchanged"
+  ]
+}

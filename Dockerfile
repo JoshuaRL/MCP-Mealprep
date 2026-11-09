@@ -1,112 +1,46 @@
-# Start with buildpack-deps (Debian-based) from 
-FROM buildpack-deps:bullseye
+# Pin runtime image indexes; top-level package pins are not a full dependency lock.
+FROM ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 AS uv
+FROM node:24-bookworm-slim@sha256:c86ecead9e55a5210ac1727de38a4ca840bf03dcaf34dc9749addbf383b1920c AS runtime
 
-# Create Workdirectory
+ARG SUPERGATEWAY_VERSION=4.2.1
+ARG CONTEXT7_VERSION=1.0.1
+
 WORKDIR /app
-
-# Copy the current directory contents into the container at /app
-COPY . /app/
-
-# Install necessary system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    curl \
-    ca-certificates \
-    python3-pip \
-    python3-venv \
-    nano \
+      bash ca-certificates curl git nano python3 python3-pip python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv CLI
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+# One uv installation. A venv keeps optional pip installs off Debian's system Python.
+COPY --from=uv /uv /uvx /usr/local/bin/
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
+ENV npm_config_engine_strict=true
+RUN npm install --global --no-audit --no-fund \
+      "supergateway@${SUPERGATEWAY_VERSION}" "c7-mcp-server@${CONTEXT7_VERSION}"
 
-# Rest of node install taken from nodejs/docker-node:Dockerfile-debian.template
-# Create a node group and user
-RUN groupadd --gid 1000 node \
-    && useradd --uid 1000 --gid node --shell /bin/bash --create-home node
+# Do not copy Git history, environment files, logs or the review/test harness.
+COPY startup.sh /app/startup.sh
+RUN bash -n /app/startup.sh && chmod +x /app/startup.sh \
+    && node --version && python3 --version && uv --version \
+    && python3 -m pip --version && command -v supergateway
 
-# Install Node.js 
-ENV NODE_VERSION 23.11.0
-
-RUN ARCH= && dpkgArch="$(dpkg --print-architecture)" \
-  && case "${dpkgArch##*-}" in \
-    amd64) ARCH='x64';; \
-    ppc64el) ARCH='ppc64le';; \
-    s390x) ARCH='s390x';; \
-    arm64) ARCH='arm64';; \
-    armhf) ARCH='armv7l';; \
-    i386) ARCH='x86';; \
-    *) echo "unsupported architecture"; exit 1 ;; \
-  esac \
-  # use pre-existing gpg directory, see https://github.com/nodejs/docker-node/pull/1895#issuecomment-1550389150
-  && export GNUPGHOME="$(mktemp -d)" \
-  # gpg keys listed at https://github.com/nodejs/node#release-keys
-  && set -ex \
-  && for key in \
-    C0D6248439F1D5604AAFFB4021D900FFDB233756 \
-    DD792F5973C6DE52C432CBDAC77ABFA00DDBF2B7 \
-    CC68F5A3106FF448322E48ED27F5E38D5B0A215F \
-    8FCCA13FEF1D0C2E91008E09770F7A9A5AE15600 \
-    890C08DB8579162FEE0DF9DB8BEAB4DFCF555EF4 \
-    C82FA3AE1CBEDC6BE46B9360C43CEC45C17AB93C \
-    108F52B48DB57BB0CC439B2997B01419BD92F80A \
-    A363A499291CBBC940DD62E41F10027AF002F8B0 \
-  ; do \
-      gpg --batch --keyserver hkps://keys.openpgp.org --recv-keys "$key" || \
-      gpg --batch --keyserver keyserver.ubuntu.com --recv-keys "$key" ; \
-  done \
-  && curl -fsSLO --compressed "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-$ARCH.tar.xz" \
-  && curl -fsSLO --compressed "https://nodejs.org/dist/v$NODE_VERSION/SHASUMS256.txt.asc" \
-  && gpg --batch --decrypt --output SHASUMS256.txt SHASUMS256.txt.asc \
-  && gpgconf --kill all \
-  && rm -rf "$GNUPGHOME" \
-  && grep " node-v$NODE_VERSION-linux-$ARCH.tar.xz\$" SHASUMS256.txt | sha256sum -c - \
-  && tar -xJf "node-v$NODE_VERSION-linux-$ARCH.tar.xz" -C /usr/local --strip-components=1 --no-same-owner \
-  && rm "node-v$NODE_VERSION-linux-$ARCH.tar.xz" SHASUMS256.txt.asc SHASUMS256.txt \
-  && ln -s /usr/local/bin/node /usr/local/bin/nodejs \
-  # smoke tests
-  && node --version \
-  && npm --version
-
-ENV YARN_VERSION 1.22.22
-
-RUN set -ex \
-  # use pre-existing gpg directory, see https://github.com/nodejs/docker-node/pull/1895#issuecomment-1550389150
-  && export GNUPGHOME="$(mktemp -d)" \
-  && for key in \
-    6A010C5166006599AA17F08146C2130DFD2497F5 \
-  ; do \
-    gpg --batch --keyserver hkps://keys.openpgp.org --recv-keys "$key" || \
-    gpg --batch --keyserver keyserver.ubuntu.com --recv-keys "$key" ; \
-  done \
-  && curl -fsSLO --compressed "https://yarnpkg.com/downloads/$YARN_VERSION/yarn-v$YARN_VERSION.tar.gz" \
-  && curl -fsSLO --compressed "https://yarnpkg.com/downloads/$YARN_VERSION/yarn-v$YARN_VERSION.tar.gz.asc" \
-  && gpg --batch --verify yarn-v$YARN_VERSION.tar.gz.asc yarn-v$YARN_VERSION.tar.gz \
-  && gpgconf --kill all \
-  && rm -rf "$GNUPGHOME" \
-  && mkdir -p /opt \
-  && tar -xzf yarn-v$YARN_VERSION.tar.gz -C /opt/ \
-  && ln -s /opt/yarn-v$YARN_VERSION/bin/yarn /usr/local/bin/yarn \
-  && ln -s /opt/yarn-v$YARN_VERSION/bin/yarnpkg /usr/local/bin/yarnpkg \
-  && rm yarn-v$YARN_VERSION.tar.gz.asc yarn-v$YARN_VERSION.tar.gz \
-  # smoke test
-  && yarn --version \
-  && rm -rf /tmp/*
-
-# Upgrade pip and install initial tools with extensive debugging
-RUN set -x \
-    && pip3 install --upgrade pip \
-    && pip3 install uv \
-    && echo "Pip and uv installation completed" \
-    && echo "NPM Global packages installation begins..." \
-    && npm install -g c7-mcp-server \
-    && echo "Context7 server installed locally"
-
-# Debugging step - list contents of /app to verify file exists
-RUN ls -l /app
-
-# Make the script executable
-RUN chmod +x /app/startup.sh
-
-# Drop into bash shell
+RUN mkdir -p /data/memory /home/node/.cache /home/node/.npm \
+    && chown -R node:node /data/memory /home/node/.cache /home/node/.npm
+ENV HOME=/home/node
+USER 1000:1000
 CMD ["/app/startup.sh"]
+
+# Optional OpenAPI bridge: separate target and Python dependency environment.
+# mcpo 0.0.20 uses FastAPI constructor kwargs removed by 0.162.0; keep the
+# live-tested compatibility pins until an upstream upgrade is revalidated.
+FROM runtime AS mcpo
+USER root
+RUN python3 -m venv /opt/mcpo \
+    && uv pip install --python /opt/mcpo/bin/python \
+      'mcpo==0.0.20' 'mcp==1.26.0' 'fastapi==0.135.0' 'starlette==1.10.0'
+COPY mcpo_bridge.py /app/mcpo_bridge.py
+USER 1000:1000
+CMD ["/opt/mcpo/bin/python", "/app/mcpo_bridge.py"]
+
+# Default builds remain the gateway runtime, without optional bridge dependencies.
+FROM runtime AS mealprep

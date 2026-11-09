@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "mealprep": {
+        "type": "remote",
+        "url": "http://127.0.0.1:8081/mcp",
+        "oauth": false,
+        "headers": { "Authorization": "Bearer {env:MEALPREP_GATEWAY_KEY}" },
+        "protocol": "legacy",
+        "timeout": { "startup": 120000, "catalog": 30000 }
+      }
+    }
+  }
+}

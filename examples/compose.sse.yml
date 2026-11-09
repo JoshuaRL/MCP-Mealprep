@@ -1,0 +1,6 @@
+# Legacy transport for clients exposing only an SSE endpoint (e.g. some n8n
+# versions). Do not combine this with docker-compose.mcpo.yml's HTTP upstream.
+services:
+  mcp-mealprep-everything:
+    environment:
+      MCP_TRANSPORT: sse

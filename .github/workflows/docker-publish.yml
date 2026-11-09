@@ -1,56 +1,90 @@
-name: Docker Build and Push to GHCR
-
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
+name: Verify and Publish Gateway to GHCR
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
-  # Allow manual trigger from the Actions tab
+    branches: ["main"]
   workflow_dispatch:
 
 env:
-  # Use docker.io for Docker Hub if empty
   REGISTRY: ghcr.io
-  # github.repository as <account>/<repo>
   IMAGE_NAME: ${{ github.repository }}
 
-
 jobs:
-  build-and-push:
+  verify-and-publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
-      # This is used to complete the identity challenge
-      # with sigstore/fulcio when running outside of PRs.
       id-token: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      # Install the cosign tool except on PR
-      # https://github.com/sigstore/cosign-installer
-      - name: Install cosign
-        if: github.event_name != 'pull_request'
-        uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 #v3.5.0
         with:
-          cosign-release: 'v2.2.4'
+          persist-credentials: false
 
-      # Set up BuildKit Docker container builder to be able to build
-      # multi-platform images and export cache
-      # https://github.com/docker/setup-buildx-action
+      - name: Validate offline contracts before building
+        run: |
+          bash -n startup.sh
+          python3 -m unittest discover -s tests -v
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
 
-      # Login against a Docker registry except on PR
-      # https://github.com/docker/login-action
-      - name: Log into registry ${{ env.REGISTRY }}
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@96383f45573cb7f253c731d3b3ab81c87ef81934 # v5.0.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+
+      # Load a single-platform candidate. Publication below promotes this exact
+      # tested local image; it must not rebuild after the protocol gate.
+      - name: Build and load gateway candidate
+        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        with:
+          context: .
+          target: mealprep
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: mealprep:ci
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build optional bridge candidate (not published)
+        run: docker build --target mcpo --tag mealprep:ci-mcpo .
+
+      - name: Verify both real images and retain local evidence
+        run: |
+          python3 tests/release_check.py --image mealprep:ci --bridge-image mealprep:ci-mcpo \
+            --output "$RUNNER_TEMP/mealprep-evidence"
+
+      # Only summaries, never key files or raw request/container logs. Upload is
+      # attempted on failed checks too; it does not make a failed gate successful.
+      - name: Retain synthetic verification summaries
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mealprep-verification-${{ github.run_id }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/mealprep-evidence/summary.json
+            ${{ runner.temp }}/mealprep-evidence/legacy/summary.json
+            ${{ runner.temp }}/mealprep-evidence/optional/summary.json
+
+      # Registry login and signing occur only after successful verification.
+      # Existing main/manual publication policy is retained; PRs never publish.
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 # v3.5.0
+        with:
+          cosign-release: 'v2.2.4'
+
+      - name: Log into registry
         if: github.event_name != 'pull_request'
         uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
         with:
@@ -58,38 +92,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Extract metadata (tags, labels) for Docker
-      # https://github.com/docker/metadata-action
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@96383f45573cb7f253c731d3b3ab81c87ef81934 # v5.0.0
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-
-      # Build and push Docker image with Buildx (don't push on PR)
-      # https://github.com/docker/build-push-action
-      - name: Build and push Docker image
-        id: build-and-push
-        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
-        with:
-          context: .
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      # Sign the resulting Docker image digest except on PRs.
-      # This will only write to the public Rekor transparency log when the Docker
-      # repository is public to avoid leaking data.  If you would like to publish
-      # transparency data even for private images, pass --force to cosign below.
-      # https://github.com/sigstore/cosign
-      - name: Sign the published Docker image
-        if: ${{ github.event_name != 'pull_request' }}
+      - name: Publish the tested gateway image without rebuilding
+        if: github.event_name != 'pull_request'
         env:
-          # https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-an-intermediate-environment-variable
           TAGS: ${{ steps.meta.outputs.tags }}
-          DIGEST: ${{ steps.build-and-push.outputs.digest }}
-        # This step uses the identity token to provision an ephemeral certificate
-        # against the sigstore community Fulcio instance.
-        run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
+        run: |
+          expected=$(python3 -c 'import json,os; r=json.load(open(os.environ["RUNNER_TEMP"]+"/mealprep-evidence/summary.json")); assert r["status"]=="passed"; print(r["gatewayImage"]["id"])')
+          test "$(docker image inspect mealprep:ci --format '{{.Id}}')" = "$expected"
+          test -n "$TAGS"
+          while IFS= read -r tag; do
+            test -n "$tag" || continue
+            docker tag mealprep:ci "$tag"
+            docker push "$tag"
+            docker image inspect "$tag" --format '{{index .RepoDigests 0}}' >> "$RUNNER_TEMP/mealprep-published-digests.txt"
+          done <<< "$TAGS"
+
+      - name: Sign the published gateway digest
+        if: github.event_name != 'pull_request'
+        run: |
+          while IFS= read -r reference; do
+            test -n "$reference"
+            cosign sign --yes "$reference"
+          done < <(sort -u "$RUNNER_TEMP/mealprep-published-digests.txt")
