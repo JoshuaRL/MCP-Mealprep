@@ -1,9 +1,11 @@
-# Reviewed local source only: never fall back to the old published :main image.
-# Select services explicitly. Most legacy provider recipes remain unvalidated.
+# Published-image stack: pulls the GHCR image produced from this repo's
+# main branch by .github/workflows/docker-publish.yml. No host build, no
+# source checkout needed to deploy. Select services explicitly — most
+# legacy provider recipes remain unvalidated.
+# Local development: override MEALPREP_IMAGE with your locally built tag.
 x-runtime: &runtime
-  image: mealprep:local-hardened
-  build: .
-  pull_policy: build
+  image: ${MEALPREP_IMAGE:-ghcr.io/joshuarl/mcp-mealprep:main}
+  pull_policy: always
   user: "1000:1000"
   cap_drop: [ALL]
   security_opt: ["no-new-privileges:true"]

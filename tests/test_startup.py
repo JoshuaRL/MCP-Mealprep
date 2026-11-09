@@ -310,14 +310,14 @@ class ComposeTests(unittest.TestCase):
         self.assertIn("--project-ref", env.get("MCP_ARGS", ""))
         self.assertNotIn("MCP_SUPABASE_DB_PASSWORD", env)
 
-    def test_hardened_defaults_and_local_build_selection(self):
+    def test_hardened_defaults_and_pull_selection(self):
         for service in self.services.values():
             self.assertEqual(service["user"], "1000:1000")
             self.assertIn("ALL", service["cap_drop"])
             self.assertIn("no-new-privileges:true", service["security_opt"])
-            self.assertNotIn("ghcr.io", service["image"])
-            self.assertEqual(service["pull_policy"], "build")
-            self.assertIn("build", service)
+            self.assertIn("ghcr.io/joshuarl/mcp-mealprep", service["image"])
+            self.assertEqual(service["pull_policy"], "always")
+            self.assertNotIn("build", service)
             self.assertTrue(service["environment"]["MCP_API_KEY_FILE"].startswith("/run/secrets/"))
             self.assertTrue(service["secrets"])
             for port in service["ports"]:

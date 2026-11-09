@@ -17,18 +17,18 @@ and a database token. Nothing in this example bakes in a host.
 | Baserow Cloud (free tier) | `https://baserow.io` | Your cloud account → workspace → database tokens |
 | Self-hosted | `https://<your-baserow-origin>` | Your instance's admin/user |
 
-## Use
+## Use (pull, don't build)
+
+This example deploys from the published image. The `Dockerfile` lives in
+this repo so the GHCR workflow can rebuild the image — you never need it
+to deploy.
 
 ```sh
-# 1. Build the image (fetches the candidate at the pinned commit,
-#    verifies the SHA, runs build + 31 upstream tests)
-docker compose -f examples/baserow/docker-compose.yml build
+# 1. Write secrets (0600, owned by UID 1000) — see below
 
-# 2. Create secrets (0600, owned by UID 1000) — see below
-
-# 3. Start + verify (private bind)
-BASEROW_SECRETS_DIR=/abs/path/to/secrets \
-  docker compose -f examples/baserow/docker-compose.yml up -d
+# 2. Pull + start (private bind)
+BASEROW_SECRETS_DIR=/path/to/secrets docker compose up -d
+# 3. Verify
 curl -s http://127.0.0.1:7317/health   # {"status":"ok",...}
 ```
 

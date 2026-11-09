@@ -17,10 +17,11 @@
 
 services:
   baserow-mcp:
-    build:
-      context: .
-      dockerfile: Dockerfile.baserow-mcp
-    image: baserow-mcp:dcbbd3d-wrapper
+    # Published image (built from examples/baserow/Dockerfile by the
+    # repository's GHCR workflow). Pull-only: no host build, no source
+    # checkout. Pin the digest for reproducible deploys.
+    image: ${BASEROW_MCP_IMAGE:-ghcr.io/joshuarl/mcp-mealprep:baserow-main}
+    pull_policy: always
     user: "1000:1000"
     read_only: true
     cap_drop: [ALL]
