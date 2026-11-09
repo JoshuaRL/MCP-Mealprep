@@ -1,0 +1,11 @@
+# SearXNG settings: JSON format REQUIRED for mcp-searxng.
+# Replace secret_key before use; keep real values out of git.
+use_default_settings: true
+server:
+  address: "0.0.0.0"
+  port: 8080
+  secret_key: "change-me" # REQUIRED: replace with a random string
+search:
+  formats:
+    - html
+    - json # REQUIRED: without this, mcp-searxng gets HTML and fails

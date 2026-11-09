@@ -1,0 +1,52 @@
+# Baserow MCP — production Compose draft (system-agnostic, NOT DEPLOYED)
+#
+# Decisions (owner, 2026-11-06):
+#   1. docker-compose system, host-agnostic (Cosmos Cloud is one target,
+#      nothing here assumes it; no Cosmos hostnames/paths).
+#   2. New dedicated workspace, seeded with test data.
+#   3. Private bind only (127.0.0.1), no public URL.
+#   4. Open WebUI admin registration approved (owner does it, or grants
+#      explicit go-ahead below before anyone touches admin).
+#   5. Owner operates; this runbook is the handover.
+#
+# REQUIRES before any deploy (see RUNBOOK.md):
+#   - Build the image from Dockerfile.baserow-mcp at the pinned commit.
+#   - Secret files: BASEROW_SECRETS_DIR/baserow.json ({"token": "<db token>", "url": "https://<baserow origin>"})
+#     and BASEROW_SECRETS_DIR/mcp.json ({"token": "<mcp bearer>"}) at 0600,
+#     owned by the container user. NEVER in git, compose env, or chat.
+
+services:
+  baserow-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.baserow-mcp
+    image: baserow-mcp:dcbbd3d-wrapper
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 0.5
+    tmpfs: [/tmp:rw,noexec,nosuid,mode=1777]
+    environment:
+      HOME: /tmp
+    ports:
+      # Private only. The wrapper binds 127.0.0.1:7317 inside its netns;
+      # publish is loopback-only so the Host-header + bearer gates apply.
+      - "127.0.0.1:7317:7317"
+    volumes:
+      # Read-only secret mounts; files owned by 1000, mode 0600.
+      - ${BASEROW_SECRETS_DIR:?set to the 0600 secrets dir}:/run/secrets:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7317/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "3"

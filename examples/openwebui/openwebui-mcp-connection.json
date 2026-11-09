@@ -1,0 +1,31 @@
+{
+  "$schema": "https://open-webui.laberge.cloud/schemas/mcp-connection.json",
+  "name": "mealprep-stack",
+  "description": "Example MCP connection settings for Open WebUI. Placeholders only — never put real keys in this file.",
+  "servers": [
+    {
+      "name": "mealprep-everything",
+      "url": "http://127.0.0.1:8081/mcp",
+      "auth": { "type": "bearer", "secretFile": "<gateway key file path>" }
+    },
+    {
+      "name": "mealprep-memory",
+      "url": "http://127.0.0.1:8086/mcp",
+      "auth": { "type": "bearer", "secretFile": "<gateway key file path>" }
+    },
+    {
+      "name": "mealprep-fetch",
+      "url": "http://127.0.0.1:8082/mcp",
+      "auth": { "type": "bearer", "secretFile": "<gateway key file path>" }
+    }
+  ],
+  "modelBackend": {
+    "note": "Pick ONE of: local Ollama, OpenRouter, Hugging Face, or Ollama Cloud — see README.md",
+    "examples": [
+      { "provider": "ollama-local", "baseUrl": "http://127.0.0.1:11434", "modelId": "qwen2.5:3b-instruct" },
+      { "provider": "openrouter", "baseUrl": "https://openrouter.ai/api/v1", "modelId": "openai/gpt-4o-mini" },
+      { "provider": "huggingface", "baseUrl": "https://router.huggingface.co/v1", "modelId": "meta-llama/Llama-3.1-8B-Instruct" },
+      { "provider": "ollama-cloud", "baseUrl": "https://ollama.com", "modelId": "qwen3:8b" }
+    ]
+  }
+}
