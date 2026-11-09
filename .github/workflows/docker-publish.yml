@@ -104,18 +104,17 @@ jobs:
             test -n "$tag" || continue
             docker tag mealprep:ci "$tag"
             docker push "$tag"
-            docker image inspect "$tag" --format '{{index .RepoDigests 0}}' >> "$RUNNER_TEMP/mealprep-published-digests.txt"
+            # RepoDigests[0] carries the LOCAL tag's digest reference
+            # (e.g. mealprep@sha256:...), which cosign would resolve
+            # against Docker Hub. Sign the full GHCR repo@digest instead.
+            remote=$(docker buildx imagetools inspect "$tag" | awk '/^Digest:/ {print $2}')
+            test -n "$remote"
+            echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${remote}" >> "$RUNNER_TEMP/mealprep-published-digests.txt"
           done <<< "$TAGS"
 
-      - name: Sign the published gateway digest
-        if: github.event_name != 'pull_request'
-        run: |
-          while IFS= read -r reference; do
-            test -n "$reference"
-            cosign sign --yes "$reference"
-          done < <(sort -u "$RUNNER_TEMP/mealprep-published-digests.txt")
-
-      # Publish the read-only Baserow example image (pull-only deploy).
+      # Publish the read-only Baserow example image (pull-only deploy)
+      # BEFORE any signing step, so a signing hiccup can never block the
+      # second image from being published again.
       # Its Dockerfile pins the vendor commit and runs upstream tests in-build.
       - name: Build and publish Baserow image
         if: github.event_name != 'pull_request'
@@ -129,6 +128,14 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:baserow-main
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Sign the published gateway digest
+        if: github.event_name != 'pull_request'
+        run: |
+          while IFS= read -r reference; do
+            test -n "$reference"
+            cosign sign --yes "$reference"
+          done < <(sort -u "$RUNNER_TEMP/mealprep-published-digests.txt")
 
       - name: Sign the published Baserow digest
         if: github.event_name != 'pull_request'
