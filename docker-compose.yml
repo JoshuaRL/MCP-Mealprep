@@ -174,9 +174,42 @@ services:
       MCP_COMMAND_TYPE: uvx
       MCP_PACKAGE: mcp-server-docker
 
+  # Read-only Baserow example (see examples/baserow/README.md). Own image,
+  # own secrets; does not share the gateway key or startup.sh contract.
+  mcp-mealprep-baserow:
+    image: ${BASEROW_MCP_IMAGE:-ghcr.io/joshuarl/mcp-mealprep:baserow-main}
+    pull_policy: always
+    user: "1000:1000"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 0.5
+    tmpfs: [/tmp]
+    environment:
+      HOME: /tmp
+    ports: ["127.0.0.1:7317:7317"]
+    networks: [mcp_network]
+    secrets:
+      - source: baserow_json
+        target: baserow.json
+      - source: mcp_bearer
+        target: mcp.json
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7317/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
 secrets:
   gateway_api_key:
     file: ${MEALPREP_SECRET_DIR:-./secrets}/gateway_api_key
+  baserow_json:
+    file: ${BASEROW_SECRETS_DIR:-${MEALPREP_SECRET_DIR:-./secrets}}/baserow.json
+  mcp_bearer:
+    file: ${BASEROW_SECRETS_DIR:-${MEALPREP_SECRET_DIR:-./secrets}}/mcp.json
   supabase_access_token:
     file: ${MEALPREP_SECRET_DIR:-./secrets}/supabase_access_token
   slack_bot_token:

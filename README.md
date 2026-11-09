@@ -4,7 +4,35 @@ Where you take a bunch of containers, put little MCP snacks in them, and keep 'e
 This project packages MCP server launch recipes with Supergateway and Docker Compose
 for self-hosted AI tooling, with an optional separately authenticated mcpo bridge.
 
-## Current source (unreleased repairs)
+## Pull & go (recommended for deployments like Cosmos Cloud)
+
+No clones, no builds, no host toolchains — the images are published to GHCR
+from this repo's `main` branch on every merge.
+
+```sh
+cp .env.example .env          # defaults point at example secrets
+docker compose pull           # all images from ghcr.io (nothing else to download)
+docker compose up -d          # everything starts; everything is loopback-only
+```
+
+Then adjust to taste and restart:
+- The example secrets at `examples/run/secrets/` are **obvious dummies**
+  (see the README there; gateway key / mcp bearer / Baserow token must be
+  replaced with real ones before real use).
+- Override images, secret dirs, or the SearXNG URL in `.env`
+  (`MEALPREP_IMAGE`, `BASEROW_MCP_IMAGE`, `MEALPREP_SECRET_DIR`,
+  `BASEROW_SECRETS_DIR`, `SEARXNG_INSTANCE_URL`), then
+  `docker compose up -d` again — no re-download of anything you didn't change.
+- One unavoidable third-party pull remains: SearXNG itself
+  (`searxng/searxng`) if you run the `examples/searxng` overlay; everything
+  else comes from this repo's GHCR images. No Firecrawl anywhere.
+
+Verify: `curl -s http://127.0.0.1:7317/health` for Baserow; the gateway
+ports (`8081` everything, `8082` fetch, `8086` memory) answer 401 without
+their key and work with it. Register the MCP URLs + bearer in Open WebUI
+(see `examples/openwebui/README.md`).
+
+### Current source (unreleased repairs)
 Rebuilt around [supergateway](https://github.com/supercorp-ai/supergateway), with an optional [mcpo](https://github.com/open-webui/mcpo) OpenAPI bridge.
 
 > **Local development, not a new release:** The launcher requires explicit packages/

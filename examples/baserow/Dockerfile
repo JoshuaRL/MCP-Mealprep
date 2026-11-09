@@ -28,7 +28,9 @@ RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund && npm cache clean -
     && chown -R node:node /app/wrapper /run/secrets /data
 COPY --from=builder /src/dist ./dist
 COPY wrapper/server.mjs ./wrapper/server.mjs
-RUN node --check /app/wrapper/server.mjs
+COPY wrapper/entrypoint.sh ./wrapper/entrypoint.sh
+RUN chmod +x /app/wrapper/entrypoint.sh && node --check /app/wrapper/server.mjs
 USER node
 EXPOSE 7317
-CMD ["node", "/app/wrapper/server.mjs"]
+# Wrapper honors BASEROW_FILE/MCP_FILE env (set by entrypoint); default to /run/secrets.
+CMD ["/app/wrapper/entrypoint.sh"]
