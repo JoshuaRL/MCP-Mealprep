@@ -75,7 +75,8 @@ depend on the implementation and deployment. Clients can:
 
 The Compose examples select packages for:
 
-- Web Search (SearXNG and Brave)
+- Web Search (SearXNG, Brave) — SearXNG requires a JSON-capable instance;
+  see [examples/searxng](examples/searxng/README.md)
 - Everything (MCP testing)
 - Calculator
 - Slack
@@ -85,6 +86,17 @@ The Compose examples select packages for:
 - Sequential Thinking
 - Supabase and Memory
 - AWS KB Retrieval and Docker
+- Baserow (read-only example, self-hosted or Baserow Cloud) —
+  [examples/baserow](examples/baserow/README.md)
+- Open WebUI (client example: register these servers + pick a model
+  provider, local or cloud) — [examples/openwebui](examples/openwebui/README.md)
+
+Three of those are *examples you opt into*, not default services:
+SearXNG, Baserow, and Open WebUI live under `examples/` with their own
+Compose fragments and READMEs; the default `docker-compose.yml` stack
+is unchanged by them. Firecrawl is deliberately **not** included (paid,
+credit-based) — see [docs/ADDING-A-SERVICE.md](docs/ADDING-A-SERVICE.md)
+for the find → pin → validate → include recipe behind every example.
 
 Every service must set `MCP_COMMAND_TYPE` and `MCP_PACKAGE`; `MCP_SERVER_TYPE` is
 only a log label. There is no silent fallback to the Everything test server.
@@ -174,10 +186,14 @@ offline unittest suite, and never publishes an image or runs the full Compose st
 Any new MCP servers need a clean install command via npx, uv, or pip. If you have one you'd like added, please send a pull request or issue with a testing and known-working docker-compose container section 
 
 ### Adding New MCP Servers to this project
-1. Ensure the server follows MCP protocol
-2. Follows the above syntax, including all known environment variables and "startup.sh" command
-3. Provide clear documentation, including GitHub repo for MCP server
-4. Submit a pull request or issue with proposed additions
+Follow the vetted recipe in [docs/ADDING-A-SERVICE.md](docs/ADDING-A-SERVICE.md)
+(find → pin → validate → include). In short: pin an exact version or
+commit, prove it with one bounded synthetic run and a fixed oracle
+check (never a live credential at gate time), and ship it as an opt-in
+example under `examples/` — not in the default stack, unless it belongs
+there by design. Notable gotchas from past validations: secret-bearing
+SSE URLs, host-header validation vs published ports, and providers that
+need read-only tokens to be proven write-denied.
 
 ## Retired V1 deployment
 
