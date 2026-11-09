@@ -125,7 +125,9 @@ jobs:
           platforms: linux/amd64
           load: false
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:baserow-main
+          # GHCR repository names must be lowercase; github.repository
+          # preserves owner casing (JoshuaRL), which buildx rejects.
+          tags: ghcr.io/joshuarl/mcp-mealprep:baserow-main
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -140,5 +142,5 @@ jobs:
       - name: Sign the published Baserow digest
         if: github.event_name != 'pull_request'
         env:
-          REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:baserow-main
+          REF: ghcr.io/joshuarl/mcp-mealprep:baserow-main
         run: cosign sign --yes "$REF"
