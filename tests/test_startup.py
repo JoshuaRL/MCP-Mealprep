@@ -288,7 +288,7 @@ class ComposeTests(unittest.TestCase):
             "calculator": ("uvx", "mcp-server-calculator"),
             "memory": ("npx", "@modelcontextprotocol/server-memory"),
             "puppeteer": ("npx", "@modelcontextprotocol/server-puppeteer"),
-            "searxng": ("npx", "mcp-searxng"),
+            "searxng": ("npx", "mcp-searxng@2.10.0"),
             "slack": ("npx", "@modelcontextprotocol/server-slack"),
             "everart": ("npx", "@modelcontextprotocol/server-everart"),
             "gmaps": ("npx", "@modelcontextprotocol/server-google-maps"),

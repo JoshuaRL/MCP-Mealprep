@@ -98,8 +98,9 @@ services:
       MCP_SERVER_TYPE: searxng
       MCP_PORT: 8088
       MCP_COMMAND_TYPE: npx
-      MCP_PACKAGE: mcp-searxng
-      SEARXNG_URL: http://localhost:8080
+      MCP_PACKAGE: mcp-searxng@2.10.0
+      # JSON-enabled SearXNG only — see examples/searxng/README.md.
+      SEARXNG_INSTANCE_URL: ${SEARXNG_INSTANCE_URL:-http://127.0.0.1:8888}
 
   mcp-mealprep-slack:
     <<: *runtime

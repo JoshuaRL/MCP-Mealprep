@@ -1,0 +1,13 @@
+# Self-hosted SearXNG with JSON search enabled (see README.md).
+# Overlay: pick services with `docker compose -f examples/searxng/compose.overlay.yml up -d searxng`
+# The mcp-mealprep-searxng service in ../../docker-compose.yml connects to it.
+services:
+  searxng:
+    image: searxng/searxng:latest # pin a digest for production use
+    ports: ["127.0.0.1:8888:8080"]
+    environment:
+      # Loopback-only, matching the self-hosted example in README.md.
+      SEARXNG_BASE_URL: http://127.0.0.1:8888/
+    volumes:
+      - ./settings.yml:/etc/searxng/settings.yml:ro
+    restart: unless-stopped
