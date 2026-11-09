@@ -1,18 +1,25 @@
 // Read-only production wrapper for baserow-streamable-mcp.
 //
 // Reads two secret files only:
-//   /run/secrets/baserow.json  {"token": "<db token>", "url": "https://<baserow origin>"}
-//   /run/secrets/mcp.json      {"token": "<mcp bearer>"}
+//   $BASEROW_FILE (default /run/secrets/baserow.json)
+//     {"token": "<db token>", "url": "https://<baserow origin>"}
+//   $MCP_FILE (default /run/secrets/mcp.json)
+//     {"token": "<mcp bearer>"}
+//
+// A small entrypoint copies whatever the host mounts with 0600 into
+// tmpfs, so host-side example files can be 0644 (git cannot keep 0600)
+// while the wrapper still sees strictly 0600 files.
 //
 // The Baserow origin is never hard-coded, never read from the environment,
 // and never accepted from request input. Only https origins without
 // credentials, path, query, or fragment are accepted.
 import fs from 'node:fs';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { serve } from '@hono/node-server';
 import { createMcpHandler } from '@modelcontextprotocol/server';
+import { createMcpHonoApp } from '@modelcontextprotocol/hono';
 import { BaserowClient, BaserowApiError } from '../dist/src/baserow/client.js';
 import { buildMcpServer } from '../dist/src/server/mcp-server.js';
-import { buildHttpApp } from '../dist/src/server/http-app.js';
 import { noopLogger } from '../dist/src/operations/logger.js';
 
 const READ_ONLY_TOOLS = new Set([
@@ -27,8 +34,8 @@ const READ_ONLY_TOOLS = new Set([
 
 const MAX_RESPONSE_BYTES = 1_048_576;
 const MAX_REQUEST_URL_LENGTH = 16_384;
-const BASEROW_FILE = '/run/secrets/baserow.json';
-const MCP_FILE = '/run/secrets/mcp.json';
+const BASEROW_FILE = process.env.BASEROW_FILE || '/run/secrets/baserow.json';
+const MCP_FILE = process.env.MCP_FILE || '/run/secrets/mcp.json';
 
 function privateJsonFile(file) {
   const stat = fs.lstatSync(file);
@@ -186,10 +193,25 @@ for (const name of actualToolNames) {
 }
 
 const handler = createMcpHandler(() => mcpServer);
-const app = buildHttpApp('127.0.0.1', mcpAuthToken, handler, noopLogger);
+
+// Compose-friendly binding: listen on all container interfaces, but keep
+// DNS-rebinding protection with an explicit allowedHosts list, plus the
+// bearer token. The published port must stay loopback-only (compose).
+const ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '[::1]', 'host.docker.internal', 'host-gateway', 'baserow-mcp'];
+const app = createMcpHonoApp({ host: '0.0.0.0', allowedHosts: ALLOWED_HOSTS });
+app.get('/health', context => context.json({ status: 'ok', service: 'baserow-streamable-mcp', version: '0.1.0' }));
+app.all('/mcp', async context => {
+  const header = context.req.header('Authorization');
+  const supplied = header?.startsWith('Bearer ') ? Buffer.from(header.slice('Bearer '.length)) : Buffer.alloc(0);
+  const expected = Buffer.from(mcpAuthToken);
+  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
+    return context.json({ error: 'UNAUTHORIZED' }, 401);
+  }
+  return handler.fetch(context.req.raw);
+});
 
 const server = serve(
-  { fetch: app.fetch, hostname: '127.0.0.1', port: 7317 },
+  { fetch: app.fetch, hostname: '0.0.0.0', port: 7317 },
   info => {
     process.stderr.write(JSON.stringify({ event: 'ready', port: info.port }) + '\n');
   }

@@ -296,7 +296,10 @@ class ComposeTests(unittest.TestCase):
             "aws-kb-retrieval": ("uvx", "mcp-server-aws-kb-retrieval"),
             "docker": ("uvx", "mcp-server-docker"),
         }
-        self.assertEqual(set(self.services), {"mcp-mealprep-" + name for name in expected})
+        # baserow is a standalone read-only example service, not a gateway
+        # recipe: no MCP_PACKAGE/startup.sh contract applies to it.
+        self.assertEqual(set(self.services),
+                         {"mcp-mealprep-" + name for name in expected} | {"mcp-mealprep-baserow"})
         for name, (runner, package) in expected.items():
             with self.subTest(service=name):
                 env = self.services["mcp-mealprep-" + name]["environment"]
@@ -311,17 +314,22 @@ class ComposeTests(unittest.TestCase):
         self.assertNotIn("MCP_SUPABASE_DB_PASSWORD", env)
 
     def test_hardened_defaults_and_pull_selection(self):
-        for service in self.services.values():
+        for name, service in self.services.items():
             self.assertEqual(service["user"], "1000:1000")
             self.assertIn("ALL", service["cap_drop"])
             self.assertIn("no-new-privileges:true", service["security_opt"])
             self.assertIn("ghcr.io/joshuarl/mcp-mealprep", service["image"])
             self.assertEqual(service["pull_policy"], "always")
             self.assertNotIn("build", service)
-            self.assertTrue(service["environment"]["MCP_API_KEY_FILE"].startswith("/run/secrets/"))
             self.assertTrue(service["secrets"])
             for port in service["ports"]:
                 self.assertEqual(port["host_ip"], "127.0.0.1")
+            if name == "mcp-mealprep-baserow":
+                # Standalone read-only example: no gateway key/startup.sh.
+                self.assertNotIn("MCP_API_KEY_FILE", service.get("environment", {}))
+                self.assertFalse(service.get("command"))
+                continue
+            self.assertTrue(service["environment"]["MCP_API_KEY_FILE"].startswith("/run/secrets/"))
         memory = self.services["mcp-mealprep-memory"]
         self.assertEqual(memory["environment"]["MEMORY_FILE_PATH"], "/data/memory/memory.jsonl")
         self.assertTrue(any(v["type"] == "volume" and v["target"] == "/data/memory" for v in memory["volumes"]))
