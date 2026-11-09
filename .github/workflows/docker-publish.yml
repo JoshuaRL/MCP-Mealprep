@@ -106,10 +106,11 @@ jobs:
             docker push "$tag"
             # RepoDigests[0] carries the LOCAL tag's digest reference
             # (e.g. mealprep@sha256:...), which cosign would resolve
-            # against Docker Hub. Sign the full GHCR repo@digest instead.
+            # against Docker Hub. Sign the full GHCR repo@digest instead,
+            # in lowercase (GHCR refs must be lowercase).
             remote=$(docker buildx imagetools inspect "$tag" | awk '/^Digest:/ {print $2}')
             test -n "$remote"
-            echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${remote}" >> "$RUNNER_TEMP/mealprep-published-digests.txt"
+            echo "ghcr.io/joshuarl/mcp-mealprep@${remote}" >> "$RUNNER_TEMP/mealprep-published-digests.txt"
           done <<< "$TAGS"
 
       # Publish the read-only Baserow example image (pull-only deploy)
